@@ -27,7 +27,6 @@ import java.util.stream.Stream;
 import org.joor.Reflect;
 import org.joor.ReflectException;
 import org.joor.test.CompileTest.J;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.validator.TestClassValidator;
 
@@ -47,7 +46,22 @@ public class CompileTest {
         assertEquals(new ArrayList<Object>(), v.validateTestClass(null));
     }
 
-    @Test /* [java-9] */ (expected = Throwable.class) // [#77] /* [/java-9] */ 
+    @Test
+    public void testUsingCompileWithClasspathDependency() throws Exception {
+
+        Reflect compiled = Reflect.using()
+                .file("org.joor.test.TestClassValidatorImplementation",
+                "package org.joor.test; public class TestClassValidatorImplementation implements org.junit.validator.TestClassValidator {"
+                        + "public java.util.List<Exception> validateTestClass(org.junit.runners.model.TestClass testClass) {"
+                        + "return new java.util.ArrayList<>();"
+                        + "}"
+                        + "}").compile();
+
+        TestClassValidator v = compiled.create().get();
+        assertEquals(new ArrayList<Object>(), v.validateTestClass(null));
+    }
+
+    @Test /* [java-9] */ (expected = Throwable.class) // [#77] /* [/java-9] */
     public void testCompileLocalInterfaceHierarchy() throws Exception {
         I i = Reflect.compile("org.joor.test.CompileTest1", "package org.joor.test; public class CompileTest1 implements org.joor.test.I {}").create().get();
         assertEquals("I.m()", i.m());

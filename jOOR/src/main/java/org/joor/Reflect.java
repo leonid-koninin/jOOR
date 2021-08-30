@@ -23,10 +23,7 @@ import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * A wrapper for an {@link Object} or {@link Class} upon which reflective calls
@@ -101,9 +98,23 @@ public class Reflect {
      * @throws ReflectException if anything went wrong compiling the class.
      */
     public static Reflect compile(String name, String content, CompileOptions options) throws ReflectException {
-        return onClass(Compile.compile(name, content, options));
+        CompileContext context = new CompileContext(name, content, options);
+        return compile(context);
+    }
+
+    /**
+     * Compile a class at runtime and reflect on it.
+     * @param context - context of compilation, (may be) set of sources
+     * @return
+     */
+    public static Reflect compile(CompileContext context) {
+        return onClass(Compile.compile(context));
     }
     /* [/java-8] */
+
+    public static CompileContextBuilder<Reflect> using() {
+        return new CompileContextBuilder<Reflect>(Reflect::compile);
+    }
 
     /**
      * Wrap a class name.

@@ -26,7 +26,6 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -53,11 +52,19 @@ import javax.tools.ToolProvider;
 class Compile {
 
     static Class<?> compile(String className, String content, CompileOptions compileOptions) {
+        return compile(new CompileContext(className, content, compileOptions));
+    }
+
+    public static CompileContextBuilder<Class<?>> using() {
+        return new CompileContextBuilder<Class<?>>(Compile::compile);
+    }
+
+    static Class<?> compile(CompileContext compileContext) {
         Lookup lookup = MethodHandles.lookup();
         ClassLoader cl = lookup.lookupClass().getClassLoader();
 
         try {
-            return cl.loadClass(className);
+            return cl.loadClass(compileContext.getClassName());
         }
         catch (ClassNotFoundException ignore) {
             JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -65,11 +72,9 @@ class Compile {
             try {
                 ClassFileManager fileManager = new ClassFileManager(compiler.getStandardFileManager(null, null, null));
 
-                List<CharSequenceJavaFileObject> files = new ArrayList<>();
-                files.add(new CharSequenceJavaFileObject(className, content));
                 StringWriter out = new StringWriter();
 
-                List<String> options = new ArrayList<>(compileOptions.options);
+                List<String> options = new ArrayList<>(compileContext.getCompileOptions().options);
                 if (!options.contains("-classpath")) {
                     StringBuilder classpath = new StringBuilder();
                     String separator = System.getProperty("path.separator");
@@ -94,10 +99,10 @@ class Compile {
                     options.addAll(Arrays.asList("-classpath", classpath.toString()));
                 }
 
-                CompilationTask task = compiler.getTask(out, fileManager, null, options, null, files);
+                CompilationTask task = compiler.getTask(out, fileManager, null, options, null, compileContext.getFiles());
 
-                if (!compileOptions.processors.isEmpty())
-                    task.setProcessors(compileOptions.processors);
+                if (!compileContext.getCompileOptions().processors.isEmpty())
+                    task.setProcessors(compileContext.getCompileOptions().processors);
 
                 task.call();
 
@@ -108,7 +113,7 @@ class Compile {
 
                 // This works if we have private-access to the interfaces in the class hierarchy
                 if (Reflect.CACHED_LOOKUP_CONSTRUCTOR != null) {
-                    result = fileManager.loadAndReturnMainClass(className,
+                    result = fileManager.loadAndReturnMainClass(compileContext.getClassName(),
                         (name, bytes) -> Reflect.on(cl).call("defineClass", name, bytes, 0, bytes.length).get());
                 }
                 /* [java-9] */
@@ -130,15 +135,15 @@ class Compile {
 
                     // If the compiled class is in the same package as the caller class, then
                     // we can use the private-access Lookup of the caller class
-                    if (className.startsWith(caller.getPackageName() + ".") &&
+                    if (compileContext.getClassName().startsWith(caller.getPackageName() + ".") &&
 
                         // [#74] This heuristic is necessary to prevent classes in subpackages of the caller to be loaded
                         //       this way, as subpackages cannot access private content in super packages.
                         //       The heuristic will work only with classes that follow standard naming conventions.
                         //       A better implementation is difficult at this point.
-                        Character.isUpperCase(className.charAt(caller.getPackageName().length() + 1))) {
+                        Character.isUpperCase(compileContext.getClassName().charAt(caller.getPackageName().length() + 1))) {
                         Lookup privateLookup = MethodHandles.privateLookupIn(caller, lookup);
-                        result = fileManager.loadAndReturnMainClass(className,
+                        result = fileManager.loadAndReturnMainClass(compileContext.getClassName(),
                             (name, bytes) -> privateLookup.defineClass(bytes));
                     }
 
@@ -146,7 +151,7 @@ class Compile {
                     // loading private-access interfaces in the compiled class's type hierarchy
                     else {
                         ByteArrayClassLoader c = new ByteArrayClassLoader(fileManager.classes());
-                        result = fileManager.loadAndReturnMainClass(className,
+                        result = fileManager.loadAndReturnMainClass(compileContext.getClassName(),
                             (name, bytes) -> c.loadClass(name));
                     }
                 }
@@ -158,7 +163,7 @@ class Compile {
                 throw e;
             }
             catch (Exception e) {
-                throw new ReflectException("Error while compiling " + className, e);
+                throw new ReflectException("Error while compiling " + compileContext.getClassName(), e);
             }
         }
     }
@@ -264,15 +269,21 @@ class Compile {
 
     static final class CharSequenceJavaFileObject extends SimpleJavaFileObject {
         final CharSequence content;
+        private final String rawClassName;
 
         public CharSequenceJavaFileObject(String className, CharSequence content) {
             super(URI.create("string:///" + className.replace('.', '/') + JavaFileObject.Kind.SOURCE.extension), JavaFileObject.Kind.SOURCE);
+            this.rawClassName = className;
             this.content = content;
         }
 
         @Override
         public CharSequence getCharContent(boolean ignoreEncodingErrors) {
             return content;
+        }
+
+        public String getRawClassName() {
+            return rawClassName;
         }
     }
 }
