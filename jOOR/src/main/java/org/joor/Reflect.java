@@ -98,7 +98,7 @@ public class Reflect {
      * @throws ReflectException if anything went wrong compiling the class.
      */
     public static Reflect compile(String name, String content, CompileOptions options) throws ReflectException {
-        CompileContext context = new CompileContext(name, content, options);
+        Compile.Context context = new Compile.Context(name, content, options);
         return compile(context);
     }
 
@@ -107,13 +107,13 @@ public class Reflect {
      * @param context - context of compilation, (may be) set of sources
      * @return
      */
-    public static Reflect compile(CompileContext context) {
+    public static Reflect compile(Compile.Context context) {
         return onClass(Compile.compile(context));
     }
     /* [/java-8] */
 
-    public static CompileContextBuilder<Reflect> using() {
-        return new CompileContextBuilder<Reflect>(Reflect::compile);
+    public static Compile.ContextBuilder<Reflect> using() {
+        return new Compile.ContextBuilder<Reflect>(Reflect::compile);
     }
 
     /**

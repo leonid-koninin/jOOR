@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.function.Function;
 
 import javax.tools.FileObject;
 import javax.tools.ForwardingJavaFileManager;
@@ -52,14 +53,14 @@ import javax.tools.ToolProvider;
 class Compile {
 
     static Class<?> compile(String className, String content, CompileOptions compileOptions) {
-        return compile(new CompileContext(className, content, compileOptions));
+        return compile(new Context(className, content, compileOptions));
     }
 
-    public static CompileContextBuilder<Class<?>> using() {
-        return new CompileContextBuilder<Class<?>>(Compile::compile);
+    public static ContextBuilder<Class<?>> using() {
+        return new ContextBuilder<Class<?>>(Compile::compile);
     }
 
-    static Class<?> compile(CompileContext compileContext) {
+    static Class<?> compile(Context compileContext) {
         Lookup lookup = MethodHandles.lookup();
         ClassLoader cl = lookup.lookupClass().getClassLoader();
 
@@ -284,6 +285,79 @@ class Compile {
 
         public String getRawClassName() {
             return rawClassName;
+        }
+    }
+
+    public static class Context {
+        private String className;
+        private final CompileOptions compileOptions;
+        private final List<CharSequenceJavaFileObject> files = new ArrayList<>();
+
+        public Context(CompileOptions compileOptions) {
+            this.compileOptions = compileOptions;
+        }
+
+        public Context(String className, String content, CompileOptions compileOptions) {
+            this(compileOptions);
+            addFile(className, content);
+        }
+
+        public List<CharSequenceJavaFileObject> getFiles() {
+            return files;
+        }
+
+        public void addFile(String className, String content) {
+            CharSequenceJavaFileObject file = new CharSequenceJavaFileObject(className, content);
+            addFile(file);
+        }
+
+        public void addFile(CharSequenceJavaFileObject file) {
+            files.add(file);
+            if (this.className == null) this.className = file.getRawClassName();
+        }
+
+        public String getClassName() {
+            return className;
+        }
+
+        public CompileOptions getCompileOptions() {
+            return compileOptions;
+        }
+    }
+
+    public static class ContextBuilder<T> {
+
+        private CompileOptions compileOptions;
+        private List<CharSequenceJavaFileObject> files = new ArrayList<>();
+        private Function<Context, T> finalizer;
+
+        public ContextBuilder(Function<Context, T> finalizer) {
+
+            this.finalizer = finalizer;
+        }
+
+        public ContextBuilder<T> compileOptions(CompileOptions compileOptions) {
+            this.compileOptions = compileOptions;
+            return this;
+        }
+
+        public ContextBuilder<T> file(String className, String content) {
+            CharSequenceJavaFileObject file = new CharSequenceJavaFileObject(className, content);
+            files.add(file);
+            return this;
+        }
+
+        protected Context build() {
+            CompileOptions ops = compileOptions == null ? new CompileOptions() : compileOptions;
+            Context context = new Context(ops);
+            for (CharSequenceJavaFileObject file : files) {
+                context.addFile(file);
+            }
+            return context;
+        }
+
+        public T compile() {
+            return finalizer.apply(build());
         }
     }
 }
